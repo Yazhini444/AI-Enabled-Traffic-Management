@@ -1,7 +1,6 @@
+venv/
 traffic_env/
-.venv/
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-.env
+logs/
+uploads/
