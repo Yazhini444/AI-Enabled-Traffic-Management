@@ -1,0 +1,501 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Live Traffic Control{% endblock %}
+
+{% block head %}
+<style>
+    .dashboard-container {
+        padding: 20px;
+    }
+
+    .live-indicator {
+        width: 10px;
+        height: 10px;
+        background-color: var(--accent-danger);
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 8px;
+        box-shadow: 0 0 10px var(--accent-danger);
+        animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+        50% {
+            opacity: 0.5;
+        }
+    }
+
+    /* Signal Visualization */
+    .signal-box {
+        background: #1a1a24;
+        padding: 20px;
+        border-radius: 10px;
+        text-align: center;
+        border: 1px solid #333;
+    }
+
+    .traffic-light {
+        width: 60px;
+        height: 160px;
+        background: #000;
+        border-radius: 20px;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        margin: 0 auto 15px;
+        border: 2px solid #333;
+        box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8);
+    }
+
+    .light {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: #333;
+        transition: all 0.3s ease;
+        position: relative;
+    }
+
+    @keyframes pulse-light-red {
+        0% {
+            box-shadow: 0 0 20px #ff0000, 0 0 40px #ff0000;
+        }
+
+        50% {
+            box-shadow: 0 0 40px #ff0000, 0 0 80px #ff0000;
+        }
+
+        100% {
+            box-shadow: 0 0 20px #ff0000, 0 0 40px #ff0000;
+        }
+    }
+
+    @keyframes pulse-light-yellow {
+        0% {
+            box-shadow: 0 0 20px #ffbf00, 0 0 40px #ffbf00;
+        }
+
+        50% {
+            box-shadow: 0 0 40px #ffbf00, 0 0 80px #ffbf00;
+        }
+
+        100% {
+            box-shadow: 0 0 20px #ffbf00, 0 0 40px #ffbf00;
+        }
+    }
+
+    @keyframes pulse-light-green {
+        0% {
+            box-shadow: 0 0 20px #00ff00, 0 0 40px #00ff00;
+        }
+
+        50% {
+            box-shadow: 0 0 40px #00ff00, 0 0 80px #00ff00;
+        }
+
+        100% {
+            box-shadow: 0 0 20px #00ff00, 0 0 40px #00ff00;
+        }
+    }
+
+    .light.red.active {
+        background: #ff0000;
+        animation: pulse-light-red 1.5s infinite;
+        filter: drop-shadow(0 0 10px #ff0000);
+    }
+
+    .light.yellow.active {
+        background: #ffbf00;
+        animation: pulse-light-yellow 1.5s infinite;
+        filter: drop-shadow(0 0 10px #ffbf00);
+    }
+
+    .light.green.active {
+        background: #00ff00;
+        animation: pulse-light-green 1.5s infinite;
+        filter: drop-shadow(0 0 10px #00ff00);
+    }
+
+    .signal-timer {
+        font-family: 'Orbitron', monospace;
+        font-size: 2rem;
+        color: var(--primary-color);
+        background: rgba(0, 0, 0, 0.5);
+        padding: 5px 15px;
+        border-radius: 5px;
+        display: inline-block;
+    }
+
+    /* Progress Bars */
+    .progress-container {
+        margin-bottom: 15px;
+    }
+
+    .progress-label {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 5px;
+        font-size: 0.9rem;
+    }
+
+    .progress {
+        height: 8px;
+        background: #333;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+
+    .progress-bar {
+        transition: width 0.5s ease;
+    }
+
+    .lane-stat-card {
+        height: 100%;
+        border-left: 4px solid var(--primary-color);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid dashboard-container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0"><span class="live-indicator"></span>Live Traffic Command Center</h2>
+            <p class="text-muted mb-0">Real-time monitoring of Node: CDB-01 (Gandhipuram Junction)</p>
+        </div>
+        <div>
+            <span class="badge bg-primary fs-6">System Status: ONLINE</span>
+        </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card p-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-1">Total Flow</h6>
+                        <h3 class="mb-0" id="totalVehicles">0</h3>
+                    </div>
+                    <div class="text-primary fs-1"><i class="fas fa-cars"></i></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card p-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-1">Avg Speed</h6>
+                        <h3 class="mb-0"><span id="avgSpeed">0</span> km/h</h3>
+                    </div>
+                    <div class="text-success fs-1"><i class="fas fa-tachometer-alt"></i></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card p-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-1">Signal Phase</h6>
+                        <h3 class="mb-0" id="currentPhase">-</h3>
+                    </div>
+                    <div class="text-warning fs-1"><i class="fas fa-traffic-light"></i></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card p-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-1">Emergencies</h6>
+                        <h3 class="mb-0 text-danger" id="emergencies">0</h3>
+                    </div>
+                    <div class="text-danger fs-1"><i class="fas fa-ambulance"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Main Signal View -->
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <i class="fas fa-crosshairs me-2"></i>Intersection Control
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <!-- North -->
+                        <div class="col-md-3">
+                            <div class="signal-box">
+                                <span class="badge bg-secondary mb-2">NORTH</span>
+                                <div class="traffic-light">
+                                    <div class="light red" id="northRed"></div>
+                                    <div class="light yellow" id="northYellow"></div>
+                                    <div class="light green" id="northGreen"></div>
+                                </div>
+                                <div class="text-muted small">Queue: <span id="northQueue">0</span></div>
+                            </div>
+                        </div>
+                        <!-- South -->
+                        <div class="col-md-3">
+                            <div class="signal-box">
+                                <span class="badge bg-secondary mb-2">SOUTH</span>
+                                <div class="traffic-light">
+                                    <div class="light red" id="southRed"></div>
+                                    <div class="light yellow" id="southYellow"></div>
+                                    <div class="light green" id="southGreen"></div>
+                                </div>
+                                <div class="text-muted small">Queue: <span id="southQueue">0</span></div>
+                            </div>
+                        </div>
+                        <!-- East -->
+                        <div class="col-md-3">
+                            <div class="signal-box">
+                                <span class="badge bg-secondary mb-2">EAST</span>
+                                <div class="traffic-light">
+                                    <div class="light red" id="eastRed"></div>
+                                    <div class="light yellow" id="eastYellow"></div>
+                                    <div class="light green" id="eastGreen"></div>
+                                </div>
+                                <div class="text-muted small">Queue: <span id="eastQueue">0</span></div>
+                            </div>
+                        </div>
+                        <!-- West -->
+                        <div class="col-md-3">
+                            <div class="signal-box">
+                                <span class="badge bg-secondary mb-2">WEST</span>
+                                <div class="traffic-light">
+                                    <div class="light red" id="westRed"></div>
+                                    <div class="light yellow" id="westYellow"></div>
+                                    <div class="light green" id="westGreen"></div>
+                                </div>
+                                <div class="text-muted small">Queue: <span id="westQueue">0</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="text-center mt-4">
+                        <div class="signal-timer" id="timeRemaining">00</div>
+                        <p class="mt-2 text-muted">Seconds until next phase change</p>
+                    </div>
+
+                    <!-- Emergency Alert Box -->
+                    <div id="emergencyAlert" class="alert alert-danger mt-3 d-none text-center fade show">
+                        <i class="fas fa-exclamation-triangle fa-shake me-2"></i>
+                        <strong>EMERGENCY DETECTED:</strong> Priority override active for <span
+                            id="emergencyLane"></span> lane!
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analytics Layout -->
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">Vehicle Classification</div>
+                        <div class="card-body">
+                            <canvas id="vehicleTypeChart" height="200"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">Traffic Density Trend</div>
+                        <div class="card-body">
+                            <canvas id="trafficFlowChart" height="200"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar Details -->
+        <div class="col-lg-4">
+            <div class="card mb-4 lane-stat-card">
+                <div class="card-header">Lane Density Analysis</div>
+                <div class="card-body">
+                    {% for lane in ['NORTH', 'SOUTH', 'EAST', 'WEST'] %}
+                    <div class="progress-container">
+                        <div class="progress-label">
+                            <span>{{ lane }}</span>
+                            <span id="{{ lane|lower }}Density">0</span>
+                        </div>
+                        <div class="progress">
+                            <div class="progress-bar bg-primary" id="{{ lane|lower }}ProgressBar" role="progressbar"
+                                style="width: 0%"></div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">Live Event Log</div>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush" id="eventsList"
+                        style="max-height: 300px; overflow-y: auto;">
+                        <!-- Events will be added here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Initialize Charts
+    const ctxType = document.getElementById('vehicleTypeChart').getContext('2d');
+    const vehicleTypeChart = new Chart(ctxType, {
+        type: 'doughnut',
+        data: {
+            labels: ['Cars', 'Motorcycles', 'Bicycles', 'Buses', 'Trucks'],
+            datasets: [{
+                data: [0, 0, 0, 0, 0],
+                backgroundColor: ['#00f2ff', '#00ff9d', '#aaaaaa', '#ffbf00', '#ff0055'],
+                borderWidth: 0,
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'right', labels: { color: '#e0e0e0' } }
+            }
+        }
+    });
+
+    const ctxFlow = document.getElementById('trafficFlowChart').getContext('2d');
+    const trafficFlowChart = new Chart(ctxFlow, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Vehicles / Min',
+                data: [],
+                borderColor: '#7000ff',
+                backgroundColor: 'rgba(112, 0, 255, 0.1)',
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: { grid: { color: '#333' }, ticks: { color: '#a0a0a0' } },
+                x: { grid: { color: '#333' }, ticks: { color: '#a0a0a0' } }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+
+    // Update Functions
+    function updateSignalVisuals(data) {
+        // Reset lights
+        document.querySelectorAll('.light').forEach(el => el.classList.remove('active'));
+
+        const lanes = ['north', 'south', 'east', 'west'];
+        const currentLaneLower = data.current_lane.toLowerCase();
+
+        lanes.forEach(lane => {
+            if (lane === currentLaneLower) {
+                // Active lane logic
+                if (data.phase === 'GREEN') document.getElementById(`${lane}Green`).classList.add('active');
+                else if (data.phase === 'YELLOW') document.getElementById(`${lane}Yellow`).classList.add('active');
+                else if (data.phase === 'RED') document.getElementById(`${lane}Red`).classList.add('active');
+            } else {
+                // Others are red
+                document.getElementById(`${lane}Red`).classList.add('active');
+            }
+        });
+
+        document.getElementById('timeRemaining').innerText = data.time_remaining;
+        document.getElementById('currentPhase').innerText = `${data.phase} (${data.current_lane})`;
+
+        // Emergency handling
+        const alertBox = document.getElementById('emergencyAlert');
+        if (data.emergency_mode) {
+            alertBox.classList.remove('d-none');
+            document.getElementById('emergencyLane').innerText = data.emergency_lane;
+        } else {
+            alertBox.classList.add('d-none');
+        }
+    }
+
+    function updateStats(data) {
+        document.getElementById('totalVehicles').innerText = data.vehicle_count;
+        document.getElementById('avgSpeed').innerText = data.avg_speed;
+
+        // Update vehicle chart from global total_detections
+        if (data.total_detections) {
+            const d = data.total_detections;
+            // Order: ['Cars', 'Motorcycles', 'Bicycles', 'Buses', 'Trucks']
+            vehicleTypeChart.data.datasets[0].data = [
+                d.cars || 0,
+                d.motorcycles || 0,
+                d.bicycles || 0,
+                d.buses || 0,
+                d.trucks || 0
+            ];
+            vehicleTypeChart.update();
+        }
+    }
+
+    function updateLaneData(data) {
+        const laneLower = data.lane.toLowerCase();
+        const counts = data.counts;
+        // Sum new types
+        const total = (counts.cars || 0) + (counts.motorcycles || 0) + (counts.bicycles || 0) + (counts.buses || 0) + (counts.trucks || 0);
+
+        document.getElementById(`${laneLower}Density`).innerText = total;
+        document.getElementById(`${laneLower}Queue`).innerText = total;
+
+        // Visual progress bar (cap at 20 for 100%)
+        const pct = Math.min((total / 20) * 100, 100);
+        const pb = document.getElementById(`${laneLower}ProgressBar`);
+        pb.style.width = `${pct}%`;
+
+        // Color coding based on density
+        pb.classList.remove('bg-primary', 'bg-warning', 'bg-danger');
+        if (pct < 30) pb.classList.add('bg-primary');
+        else if (pct < 70) pb.classList.add('bg-warning');
+        else pb.classList.add('bg-danger');
+    }
+
+    function addLogEvent(msg, type = 'info') {
+        const list = document.getElementById('eventsList');
+        const item = document.createElement('div');
+        item.className = 'list-group-item bg-transparent text-white border-bottom border-dark small';
+        const time = new Date().toLocaleTimeString();
+
+        let icon = '<i class="fas fa-info-circle text-primary"></i>';
+        if (type === 'emergency') icon = '<i class="fas fa-exclamation-circle text-danger"></i>';
+
+        item.innerHTML = `${icon} <span class="text-muted">[${time}]</span> ${msg}`;
+        list.prepend(item);
+        if (list.children.length > 10) list.lastChild.remove();
+    }
+
+    // Socket Listeners
+    if (window.trafficSystem.socket) {
+        const socket = window.trafficSystem.socket;
+
+        socket.on('signal_update', (data) => {
+            updateSignalVisuals(data);
+        });
+
+        socket.on('lane_density_update', (data) => {
+            updateLaneData(data);
+            const total = (data.counts.cars || 0) + (data.counts.motorcycles || 0) + (data.counts.bicycles || 0) + (data.counts.buses || 0);
+            if (total > 0) {
+                addLogEvent(`Updated scan for ${data.lane}: ${total} vehicles`);
+            }
+        });
+
+        socket.on('stats_update', updateStats);
+    }
+</script>
+{% endblock %}

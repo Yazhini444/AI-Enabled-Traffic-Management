@@ -1,0 +1,4 @@
+2026-02-13 11:13:47,477 - INFO - OSM road network loaded successfully
+2026-02-13 11:13:47,541 - INFO - Database initialized successfully
+2026-02-13 11:15:08,642 - ERROR - Internal server error: 500 Internal Server Error: The server encountered an internal error and was unable to complete your request. Either the server is overloaded or there is an error in the application.
+2026-02-13 11:15:17,896 - ERROR - Internal server error: 500 Internal Server Error: The server encountered an internal error and was unable to complete your request. Either the server is overloaded or there is an error in the application.

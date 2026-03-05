@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traffic Grid - Interactive Route Planner</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --primary-color: #00f2ff;
+            --bg-dark: #0a0e1a;
+            --bg-card: #141824;
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-muted: #a0aec0;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0e1a 0%, #1a1f35 100%);
+            color: white;
+            overflow: hidden;
+        }
+
+        /* Map Container */
+        #coimbatoreMap {
+            height: 100vh;
+            width: 100%;
+            z-index: 1;
+        }
+
+        /* Header Bar */
+        .header-bar {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(20, 24, 36, 0.95);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 15px 25px;
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        .header-bar h3 {
+            margin: 0;
+            font-size: 20px;
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+
+        .header-bar .subtitle {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 3px;
+        }
+
+        /* Controls Panel */
+        .map-controls-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(20, 24, 36, 0.95);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 20px;
+            width: 380px;
+            max-height: 90vh;
+            overflow-y: auto;
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        .map-controls-panel::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .map-controls-panel::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+        }
+
+        .map-controls-panel::-webkit-scrollbar-thumb {
+            background: var(--primary-color);
+            border-radius: 10px;
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid var(--glass-border);
+        }
+
+        .panel-header h4 {
+            color: var(--primary-color);
+            margin: 0;
+            font-weight: 600;
+            font-size: 18px;
+        }
+
+        .panel-header i {
+            font-size: 20px;
+            margin-right: 10px;
+        }
+
+        /* Mode Tabs */
+        .nav-pills {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 5px;
+        }
+
+        .nav-pills .nav-link {
+            color: var(--text-muted);
+            border-radius: 8px;
+            font-size: 0.85rem;
+            padding: 10px 15px;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+
+        .nav-pills .nav-link:hover {
+            color: white;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .nav-pills .nav-link.active {
+            background: linear-gradient(135deg, var(--primary-color) 0%, #0099ff 100%);
+            color: #000;
+            font-weight: 700;
+            box-shadow: 0 4px 12px rgba(0, 242, 255, 0.4);
+        }
+
+        /* Form Controls */
+        .form-control,
+        .form-select {
+            background-color: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            color: white;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .form-control:focus,
+        .form-select:focus {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-color: var(--primary-color);
+            color: white;
+            box-shadow: 0 0 0 0.25rem rgba(0, 242, 255, 0.25);
+            outline: none;
+        }
+
+        .form-control::placeholder {
+            color: var(--text-muted);
+        }
+
+        .form-label {
+            color: var(--text-muted);
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+        }
+
+        .form-label i {
+            margin-right: 8px;
+            color: var(--primary-color);
+        }
+
+        /* Buttons */
+        .btn {
+            border-radius: 8px;
+            padding: 12px 20px;
+            font-weight: 600;
+            font-size: 14px;
+            border: none;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .btn:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-color) 0%, #0099ff 100%);
+            color: #000;
+            box-shadow: 0 4px 12px rgba(0, 242, 255, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 242, 255, 0.5);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, var(--warning-color) 0%, #d97706 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+        }
+
+        .btn-warning:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(245, 158, 11, 0.5);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, var(--success-color) 0%, #059669 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            animation: pulse-success-btn 2.5s infinite;
+        }
+
+        @keyframes pulse-success-btn {
+            0% {
+                box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            }
+
+            50% {
+                box-shadow: 0 4px 25px rgba(16, 185, 129, 0.7);
+            }
+
+            100% {
+                box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            }
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 30px rgba(16, 185, 129, 0.8);
+            animation: none;
+        }
+
+        .btn-danger,
+        .btn-outline-danger {
+            background: linear-gradient(135deg, var(--danger-color) 0%, #dc2626 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-danger:hover,
+        .btn-outline-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.5);
+        }
+
+        /* Vehicle Selector */
+        .vehicle-selector {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .vehicle-btn {
+            padding: 15px;
+            border: 2px solid var(--glass-border);
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .vehicle-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0, 242, 255, 0.1), transparent);
+            transition: left 0.5s;
+        }
+
+        .vehicle-btn:hover::before {
+            left: 100%;
+        }
+
+        .vehicle-btn:hover {
+            border-color: var(--primary-color);
+            background: rgba(0, 242, 255, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .vehicle-btn.active {
+            border-color: var(--primary-color);
+            background: rgba(0, 242, 255, 0.2);
+            box-shadow: 0 0 20px rgba(0, 242, 255, 0.3);
+        }
+
+        .vehicle-btn i {
+            font-size: 28px;
+            display: block;
+            margin-bottom: 8px;
+            color: var(--primary-color);
+        }
+
+        .vehicle-btn .label {
+            font-size: 12px;
+            font-weight: 600;
+            color: white;
+        }
+
+        /* Mode Instructions */
+        .mode-instructions {
+            background: linear-gradient(135deg, rgba(0, 242, 255, 0.1) 0%, rgba(0, 242, 255, 0.05) 100%);
+            border-left: 3px solid var(--primary-color);
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            color: var(--text-muted);
+            margin: 15px 0;
+            display: flex;
+            align-items: center;
+        }
+
+        .mode-instructions i {
+            margin-right: 10px;
+            color: var(--primary-color);
+            font-size: 18px;
+        }
+
+        /* Route Statistics */
+        #routeStats {
+            background: linear-gradient(135deg, rgba(0, 242, 255, 0.15) 0%, rgba(0, 242, 255, 0.05) 100%);
+            border: 1px solid var(--primary-color);
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        #routeStats h5 {
+            color: var(--primary-color);
+            margin-bottom: 15px;
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+        }
+
+        #routeStats h5 i {
+            margin-right: 10px;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+        }
+
+        .stat-label i {
+            margin-right: 8px;
+            font-size: 16px;
+        }
+
+        .stat-value {
+            color: white;
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+        /* Alerts */
+        .alert {
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-top: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .alert i {
+            margin-right: 10px;
+            font-size: 16px;
+        }
+
+        .alert-success {
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: var(--success-color);
+        }
+
+        .alert-warning {
+            background: rgba(245, 158, 11, 0.15);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            color: var(--warning-color);
+        }
+
+        .alert-danger {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: var(--danger-color);
+        }
+
+        /* Map Layers Toggle */
+        .form-switch {
+            padding-left: 2.5em;
+            margin-bottom: 12px;
+        }
+
+        .form-switch .form-check-input {
+            width: 3em;
+            height: 1.5em;
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--glass-border);
+            cursor: pointer;
+        }
+
+        .form-switch .form-check-input:checked {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+            box-shadow: 0 0 10px rgba(0, 242, 255, 0.5);
+        }
+
+        .form-check-label {
+            color: var(--text-muted);
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+        }
+
+        .form-check-label i {
+            margin-right: 8px;
+        }
+
+        /* Divider */
+        .divider {
+            border: none;
+            border-top: 1px solid var(--glass-border);
+            margin: 20px 0;
+        }
+
+        /* Loading Spinner */
+        .loading-spinner {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--primary-color);
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Leaflet Customization */
+        .leaflet-popup-content-wrapper {
+            background: rgba(20, 24, 36, 0.95);
+            color: white;
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--primary-color);
+            border-radius: 8px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        .leaflet-popup-tip {
+            background: rgba(20, 24, 36, 0.95);
+        }
+
+        .leaflet-popup-content {
+            margin: 15px;
+            font-size: 14px;
+        }
+
+        .leaflet-popup-content h4 {
+            color: var(--primary-color);
+            margin-bottom: 5px;
+        }
+
+        /* Message Area */
+        .message-area {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 2000;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .message {
+            padding: 15px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            backdrop-filter: blur(10px);
+            animation: slideUp 0.3s ease-out;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(100px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .message i {
+            margin-right: 12px;
+            font-size: 18px;
+        }
+
+        .message.success {
+            background: rgba(16, 185, 129, 0.95);
+            color: white;
+        }
+
+        .message.error {
+            background: rgba(239, 68, 68, 0.95);
+            color: white;
+        }
+
+        .message.info {
+            background: rgba(0, 242, 255, 0.95);
+            color: black;
+        }
+
+        /* Options */
+        option {
+            background: var(--bg-card);
+            color: white;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .map-controls-panel {
+                width: 90%;
+                right: 5%;
+                max-height: 80vh;
+            }
+
+            .header-bar {
+                width: 90%;
+                left: 5%;
+            }
+
+            .vehicle-selector {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Header Bar -->
+    <div class="header-bar">
+        <h3><i class="fas fa-map-marked-alt"></i> Traffic Grid Route Planner</h3>
+        <div class="subtitle">AI-Powered Navigation System</div>
+    </div>
+
+    <!-- Map Container -->
+    <div id="coimbatoreMap"></div>
+
+    <!-- Controls Panel -->
+    <div class="map-controls-panel">
+        <div class="panel-header">
+            <i class="fas fa-route"></i>
+            <h4>Route Planning Console</h4>
+        </div>
+
+        <!-- Mode Selection Tabs -->
+        <ul class="nav nav-pills mb-3" role="tablist">
+            <li class="nav-item" style="flex: 1;">
+                <button class="nav-link active w-100" id="manual-tab" data-bs-toggle="pill"
+                    data-bs-target="#manual-pane" onclick="switchMode('manual')">
+                    <i class="fas fa-mouse-pointer me-2"></i>Click Mode
+                </button>
+            </li>
+            <li class="nav-item" style="flex: 1;">
+                <button class="nav-link w-100" id="auto-tab" data-bs-toggle="pill" data-bs-target="#auto-pane"
+                    onclick="switchMode('auto')">
+                    <i class="fas fa-keyboard me-2"></i>Type Mode
+                </button>
+            </li>
+        </ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content">
+            <!-- Manual Mode -->
+            <div class="tab-pane fade show active" id="manual-pane">
+                <div class="mode-instructions">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Click on map to set start and destination points</span>
+                </div>
+                <button class="btn btn-primary w-100" id="planRouteBtn" onclick="toggleRouteMode()">
+                    <i class="fas fa-map-marker-alt me-2"></i>Set Waypoints
+                </button>
+            </div>
+
+            <!-- Automatic Mode -->
+            <div class="tab-pane fade" id="auto-pane">
+                <div class="mb-3">
+                    <label class="form-label">
+                        <i class="fas fa-map-pin"></i>Start Location
+                    </label>
+                    <input type="text" class="form-control" id="startLocation"
+                        placeholder="e.g., Gandhipuram, Coimbatore">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">
+                        <i class="fas fa-flag-checkered"></i>End Location
+                    </label>
+                    <input type="text" class="form-control" id="endLocation" placeholder="e.g., RS Puram, Coimbatore">
+                </div>
+            </div>
+        </div>
+
+        <hr class="divider">
+
+        <!-- Vehicle Type Selection -->
+        <label class="form-label">
+            <i class="fas fa-car"></i>Vehicle Type
+        </label>
+        <div class="vehicle-selector">
+            <div class="vehicle-btn active" data-vehicle="car" onclick="selectVehicle(this, 'car')">
+                <i class="fas fa-car"></i>
+                <div class="label">Car</div>
+            </div>
+            <div class="vehicle-btn" data-vehicle="motorcycle" onclick="selectVehicle(this, 'motorcycle')">
+                <i class="fas fa-motorcycle"></i>
+                <div class="label">Bike</div>
+            </div>
+            <div class="vehicle-btn" data-vehicle="bus" onclick="selectVehicle(this, 'bus')">
+                <i class="fas fa-bus"></i>
+                <div class="label">Bus</div>
+            </div>
+            <div class="vehicle-btn" data-vehicle="truck" onclick="selectVehicle(this, 'truck')">
+                <i class="fas fa-truck"></i>
+                <div class="label">Truck</div>
+            </div>
+        </div>
+
+        <hr class="divider">
+
+        <!-- Action Buttons -->
+        <div class="d-grid gap-2">
+            <button class="btn btn-success" onclick="calculateRoute()">
+                <i class="fas fa-calculator me-2"></i>Calculate Route
+            </button>
+            <button class="btn btn-outline-danger" onclick="clearRoute()">
+                <i class="fas fa-trash me-2"></i>Clear Route
+            </button>
+        </div>
+
+        <!-- Route Statistics -->
+        <div id="routeStats" class="d-none">
+            <h5>
+                <i class="fas fa-chart-line"></i>Route Information
+            </h5>
+            <div class="stat-item">
+                <span class="stat-label">
+                    <i class="fas fa-road"></i>Distance
+                </span>
+                <span class="stat-value" id="routeDist">-</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">
+                    <i class="fas fa-clock"></i>Duration
+                </span>
+                <span class="stat-value" id="routeTime">-</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">
+                    <i class="fas fa-car-side"></i>Vehicle
+                </span>
+                <span class="stat-value" id="routeVehicle">Car</span>
+            </div>
+            <div class="alert alert-success" id="routeAlert">
+                <i class="fas fa-check-circle"></i>
+                <span>Route optimized for current traffic conditions</span>
+            </div>
+        </div>
+
+        <hr class="divider">
+
+        <!-- Map Layers Control -->
+        <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="layerSignals" checked onchange="toggleLayer('signals')">
+            <label class="form-check-label" for="layerSignals">
+                <i class="fas fa-traffic-light"></i>Traffic Signals
+            </label>
+        </div>
+        <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="layerTraffic" onchange="toggleLayer('traffic')">
+            <label class="form-check-label" for="layerTraffic">
+                <i class="fas fa-layer-group"></i>Traffic Density Overlay
+            </label>
+        </div>
+    </div>
+
+    <!-- Message Area -->
+    <div class="message-area" id="messageArea"></div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Global Variables
+        let map;
+        let routeLine = null;
+        let markers = [];
+        let isPlanning = false;
+        let points = [];
+        let signalLayer = L.layerGroup();
+        let selectedVehicle = 'car';
+        let currentMode = 'manual';
+
+        // Initialize Map
+        function initMap() {
+            // Create map centered on Coimbatore
+            map = L.map('coimbatoreMap').setView([11.0168, 76.9558], 13);
+
+            // Add dark theme tile layer
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 20
+            }).addTo(map);
+
+            // Add signal layer
+            map.addLayer(signalLayer);
+
+            // Map click handler
+            map.on('click', onMapClick);
+
+            // Load traffic signals
+            loadRoadData();
+
+            // Show initial message
+            showMessage('Welcome! Click on map or type locations to plan your route', 'info');
+        }
+
+        // Load Road Data and Signals
+        function loadRoadData() {
+            fetch('/api/roads')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success && data.intersections) {
+                        data.intersections.forEach(node => {
+                            const icon = L.divIcon({
+                                className: 'custom-signal-icon',
+                                html: `<div style="background-color:#ffbf00;width:14px;height:14px;border-radius:50%;box-shadow:0 0 12px #ffbf00;border:2px solid #fff;"></div>`,
+                                iconSize: [14, 14],
+                                iconAnchor: [7, 7]
+                            });
+
+                            const marker = L.marker([node.lat, node.lng], { icon: icon })
+                                .bindPopup(`<h4>${node.name}</h4><p>Traffic Junction<br>ID: ${node.id}</p>`);
+
+                            signalLayer.addLayer(marker);
+                        });
+                    }
+                })
+                .catch(err => console.error('Failed to load road data:', err));
+        }
+
+        // Switch Mode
+        function switchMode(mode) {
+            currentMode = mode;
+            clearRoute();
+
+            if (mode === 'auto') {
+                if (isPlanning) {
+                    toggleRouteMode(); // Turn off planning mode
+                }
+            }
+        }
+
+        // Toggle Route Planning Mode
+        function toggleRouteMode() {
+            isPlanning = !isPlanning;
+            const btn = document.getElementById('planRouteBtn');
+
+            if (isPlanning) {
+                btn.classList.remove('btn-primary');
+                btn.classList.add('btn-warning');
+                btn.innerHTML = '<i class="fas fa-mouse-pointer me-2"></i>Click Start Point';
+                map.getContainer().style.cursor = 'crosshair';
+                points = [];
+                clearRoute();
+                showMessage('Click on map to set starting point', 'info');
+            } else {
+                resetRouteButton();
+                map.getContainer().style.cursor = '';
+            }
+        }
+
+        // Reset Route Button
+        function resetRouteButton() {
+            const btn = document.getElementById('planRouteBtn');
+            btn.classList.remove('btn-warning');
+            btn.classList.add('btn-primary');
+            btn.innerHTML = '<i class="fas fa-map-marker-alt me-2"></i>Set Waypoints';
+            isPlanning = false;
+        }
+
+        // Map Click Handler
+        function onMapClick(e) {
+            if (!isPlanning || currentMode !== 'manual') return;
+
+            const btn = document.getElementById('planRouteBtn');
+
+            if (points.length === 0) {
+                // First click - start point
+                addRouteMarker(e.latlng, true);
+                points.push(e.latlng);
+                btn.innerHTML = '<i class="fas fa-flag-checkered me-2"></i>Click End Point';
+                showMessage('Now click on map to set destination', 'info');
+            } else if (points.length === 1) {
+                // Second click - end point
+                addRouteMarker(e.latlng, false);
+                points.push(e.latlng);
+                resetRouteButton();
+                map.getContainer().style.cursor = '';
+
+                // Auto-calculate route
+                fetchRoute(points[0], points[1]);
+            }
+        }
+
+        // Add Route Marker
+        function addRouteMarker(latlng, isStart) {
+            const color = isStart ? 'green' : 'red';
+            const iconUrl = `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`;
+
+            const marker = L.marker(latlng, {
+                icon: L.icon({
+                    iconUrl: iconUrl,
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41],
+                    popupAnchor: [1, -34],
+                    shadowSize: [41, 41]
+                })
+            }).addTo(map);
+
+            marker.bindPopup(`<h4>${isStart ? 'Start Point' : 'Destination'}</h4>`);
+            markers.push(marker);
+        }
+
+        // Select Vehicle
+        function selectVehicle(element, vehicle) {
+            document.querySelectorAll('.vehicle-btn').forEach(btn => btn.classList.remove('active'));
+            element.classList.add('active');
+            selectedVehicle = vehicle;
+
+            const vehicleNames = {
+                'car': 'Car',
+                'motorcycle': 'Motorcycle',
+                'bus': 'Bus',
+                'truck': 'Truck'
+            };
+
+            document.getElementById('routeVehicle').textContent = vehicleNames[vehicle];
+        }
+
+        // Calculate Route
+        function calculateRoute() {
+            let start, end;
+
+            if (currentMode === 'manual') {
+                if (points.length !== 2) {
+                    showMessage('Please set both start and end points on the map', 'error');
+                    return;
+                }
+                start = { lat: points[0].lat, lng: points[0].lng };
+                end = { lat: points[1].lat, lng: points[1].lng };
+            } else {
+                const startLoc = document.getElementById('startLocation').value.trim();
+                const endLoc = document.getElementById('endLocation').value.trim();
+
+                if (!startLoc || !endLoc) {
+                    showMessage('Please enter both start and end locations', 'error');
+                    return;
+                }
+
+                start = startLoc;
+                end = endLoc;
+            }
+
+            fetchRoute(start, end);
+        }
+
+        // Fetch Route from API
+        function fetchRoute(start, end) {
+            // Show loading state
+            const statsDiv = document.getElementById('routeStats');
+            statsDiv.classList.remove('d-none');
+            document.getElementById('routeDist').innerHTML = '<span class="loading-spinner"></span>';
+            document.getElementById('routeTime').innerHTML = '<span class="loading-spinner"></span>';
+
+            showMessage('Calculating optimal route...', 'info');
+
+            // Prepare payload
+            const payload = {
+                vehicle_type: selectedVehicle
+            };
+
+            if (typeof start === 'object' && start.lat) {
+                payload.start = start;
+            } else {
+                payload.start = start;
+            }
+
+            if (typeof end === 'object' && end.lat) {
+                payload.end = end;
+            } else {
+                payload.end = end;
+            }
+
+            // Make API call
+            fetch('/api/route/calculate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success && data.route) {
+                        displayRoute(data);
+                        showMessage('Route calculated successfully!', 'success');
+                    } else {
+                        throw new Error(data.error || 'Route calculation failed');
+                    }
+                })
+                .catch(err => {
+                    console.error('Route error:', err);
+                    showMessage('Failed to calculate route: ' + err.message, 'error');
+                    statsDiv.classList.add('d-none');
+                });
+        }
+
+        // Display Route
+        function displayRoute(data) {
+            // Clear existing route line
+            if (routeLine) {
+                map.removeLayer(routeLine);
+            }
+
+            // Add markers if from text input (auto mode)
+            if (currentMode === 'auto' && markers.length === 0 && data.start && data.end) {
+                addRouteMarker({ lat: data.start[0], lng: data.start[1] }, true);
+                addRouteMarker({ lat: data.end[0], lng: data.end[1] }, false);
+            }
+
+            // Draw route line
+            routeLine = L.polyline(data.route, {
+                color: '#00f2ff',
+                weight: 6,
+                opacity: 0.9,
+                lineJoin: 'round',
+                dashArray: data.fallback ? '10, 10' : null
+            }).addTo(map);
+
+            // Add glow effect
+            L.polyline(data.route, {
+                color: '#00f2ff',
+                weight: 12,
+                opacity: 0.3,
+                lineJoin: 'round'
+            }).addTo(map);
+
+            // Fit map bounds
+            map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
+
+            // Update statistics
+            document.getElementById('routeDist').textContent = `${data.distance} km`;
+            document.getElementById('routeTime').textContent = `${data.estimated_time} min`;
+            document.getElementById('routeStats').classList.remove('d-none');
+
+            // Update alert message
+            const alertDiv = document.getElementById('routeAlert');
+            if (data.fallback) {
+                alertDiv.className = 'alert alert-warning';
+                alertDiv.innerHTML = '<i class="fas fa-exclamation-triangle"></i><span>Estimated route - actual path may vary</span>';
+            } else {
+                alertDiv.className = 'alert alert-success';
+                alertDiv.innerHTML = '<i class="fas fa-check-circle"></i><span>Route optimized for current traffic conditions</span>';
+            }
+        }
+
+        // Clear Route
+        function clearRoute() {
+            // Remove markers
+            markers.forEach(m => map.removeLayer(m));
+            markers = [];
+
+            // Remove route line
+            if (routeLine) {
+                map.removeLayer(routeLine);
+                routeLine = null;
+            }
+
+            // Hide statistics
+            document.getElementById('routeStats').classList.add('d-none');
+
+            // Clear points
+            points = [];
+
+            // Clear input fields
+            document.getElementById('startLocation').value = '';
+            document.getElementById('endLocation').value = '';
+        }
+
+        // Toggle Map Layers
+        function toggleLayer(type) {
+            if (type === 'signals') {
+                const checkbox = document.getElementById('layerSignals');
+                if (checkbox.checked) {
+                    map.addLayer(signalLayer);
+                } else {
+                    map.removeLayer(signalLayer);
+                }
+            } else if (type === 'traffic') {
+                const checkbox = document.getElementById('layerTraffic');
+                if (checkbox.checked) {
+                    showMessage('Traffic density layer coming soon!', 'info');
+                    checkbox.checked = false;
+                }
+            }
+        }
+
+        // Show Message
+        function showMessage(text, type = 'info') {
+            const messageArea = document.getElementById('messageArea');
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+
+            const icons = {
+                success: 'fa-check-circle',
+                error: 'fa-times-circle',
+                info: 'fa-info-circle'
+            };
+
+            messageDiv.innerHTML = `
+                <i class="fas ${icons[type]}"></i>
+                <span>${text}</span>
+            `;
+
+            messageArea.innerHTML = '';
+            messageArea.appendChild(messageDiv);
+
+            setTimeout(() => {
+                messageDiv.style.animation = 'slideUp 0.3s ease-out reverse';
+                setTimeout(() => {
+                    messageArea.innerHTML = '';
+                }, 300);
+            }, 4000);
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
+        });
+    </script>
+</body>
+
+</html>

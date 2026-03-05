@@ -1,0 +1,704 @@
+{% extends "base.html" %}
+
+{% block title %}Input Analysis - Traffic AI{% endblock %}
+
+{% block head %}
+<style>
+    /* ── original card / tab / upload styles (unchanged) ─── */
+    .input-card {
+        background: var(--bg-card);
+        border: 1px solid var(--glass-border);
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        height: 100%;
+    }
+
+    .nav-tabs .nav-link {
+        color: var(--text-muted);
+        border: none;
+        border-bottom: 2px solid transparent;
+        padding: 1rem 1.5rem;
+        transition: all 0.3s;
+    }
+    .nav-tabs .nav-link:hover {
+        color: var(--text-main);
+        background: rgba(255, 255, 255, 0.05);
+    }
+    .nav-tabs .nav-link.active {
+        color: var(--primary-color);
+        background: transparent;
+        border-bottom: 2px solid var(--primary-color);
+        font-weight: bold;
+    }
+
+    .upload-zone {
+        border: 2px dashed var(--glass-border);
+        border-radius: 12px;
+        padding: 4rem 2rem;
+        text-align: center;
+        transition: all 0.3s ease;
+        background: rgba(0, 0, 0, 0.2);
+        cursor: pointer;
+    }
+    .upload-zone:hover, .upload-zone.active {
+        border-color: var(--primary-color);
+        background: rgba(0, 242, 255, 0.05);
+        box-shadow: 0 0 20px rgba(0, 242, 255, 0.1);
+    }
+    .upload-icon { font-size: 4rem; color: var(--text-muted); margin-bottom: 1rem; transition: color 0.3s; }
+    .upload-zone:hover .upload-icon { color: var(--primary-color); }
+
+    .preview-box {
+        position: relative; border-radius: 12px; overflow: hidden;
+        background: #000; border: 1px solid var(--glass-border);
+        min-height: 300px; display: flex; align-items: center; justify-content: center;
+    }
+    .preview-media  { max-width: 100%; max-height: 500px; display: block; }
+    .overlay-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+
+    .stats-badge {
+        background: rgba(26, 26, 46, 0.8); border: 1px solid var(--glass-border);
+        padding: 10px 15px; border-radius: 8px;
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 10px; backdrop-filter: blur(5px);
+    }
+    .count-number { font-family: 'Orbitron', monospace; font-size: 1.2rem; font-weight: bold; }
+
+    .spinner-cyber {
+        width: 50px; height: 50px;
+        border: 3px solid transparent;
+        border-top: 3px solid var(--primary-color);
+        border-right: 3px solid var(--secondary-color);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+
+    /* ════════════════════════════════════════════════════════
+       TRAFFIC INTELLIGENCE PANEL  (new styles added below)
+    ════════════════════════════════════════════════════════ */
+
+    /* hidden until first detection */
+    #intel-panel { display: none; }
+    #intel-panel.show { display: block; }
+
+    /* pipeline step trace */
+    .pipeline-steps { margin-bottom: 4px; }
+    .ps-row {
+        display: flex; align-items: flex-start; gap: 10px;
+        padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,.07);
+    }
+    .ps-row:last-child { border-bottom: none; }
+    .ps-num {
+        min-width: 26px; height: 26px; border-radius: 50%;
+        background: linear-gradient(135deg, #00d4ff, #0050cc);
+        display: flex; align-items: center; justify-content: center;
+        font-size: .62rem; font-weight: 800;
+        font-family: 'Orbitron', monospace; color: #000; flex-shrink: 0;
+    }
+    .ps-label { font-size: .67rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+    .ps-value { font-size: .82rem; color: #fff; font-weight: 600; margin-top: 2px; }
+
+    /* signal recommendation card */
+    .signal-card {
+        border-radius: 10px; padding: 14px; text-align: center;
+        border: 1px solid transparent; transition: all .4s;
+        margin-bottom: 4px;
+    }
+    .signal-card.LOW      { background: rgba(0,200,100,.1);  border-color: rgba(0,200,100,.35); }
+    .signal-card.MEDIUM   { background: rgba(255,165,0,.1);  border-color: rgba(255,165,0,.35); }
+    .signal-card.HIGH     { background: rgba(255,80,0,.1);   border-color: rgba(255,80,0,.35); }
+    .signal-card.CRITICAL { background: rgba(220,0,0,.13);   border-color: rgba(220,0,0,.45); }
+
+    .sc-icon  { font-size: 2rem; display: block; margin-bottom: 3px; }
+    .sc-lane  { font-family: 'Orbitron', monospace; font-size: 1.5rem; font-weight: bold; letter-spacing: .08em; }
+    .sc-dur   { font-size: .85rem; color: rgba(255,255,255,.65); margin-top: 3px; }
+    .sc-reason{ font-size: .67rem; color: rgba(255,255,255,.4); margin-top: 7px; line-height: 1.4; }
+
+    /* lane density bars */
+    .ld-row { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+    .ld-name {
+        width: 52px; font-size: .68rem; font-family: 'Orbitron', monospace;
+        color: var(--text-muted); text-align: right; flex-shrink: 0;
+    }
+    .ld-track { flex: 1; height: 12px; background: rgba(255,255,255,.06); border-radius: 3px; overflow: hidden; }
+    .ld-fill  { height: 100%; border-radius: 3px; transition: width .5s ease;
+                background: linear-gradient(90deg, #00d4ff, #0050cc); }
+    .ld-fill.HIGH     { background: linear-gradient(90deg, #ff8800, #cc4400); }
+    .ld-fill.CRITICAL { background: linear-gradient(90deg, #ff1100, #880000); }
+    .ld-fill.LOW      { background: linear-gradient(90deg, #00cc55, #006633); }
+    .ld-score  { width: 34px; text-align: right; font-size: .68rem; color: #fff; flex-shrink: 0; }
+    .ld-level  { width: 50px; font-size: .6rem; text-align: center;
+                  padding: 1px 3px; border-radius: 3px;
+                  background: rgba(255,255,255,.07); color: var(--text-muted); flex-shrink: 0; }
+    .ld-green  { font-size: .58rem; font-family: 'Orbitron', monospace;
+                  background: linear-gradient(135deg,#00d4ff,#0050cc);
+                  color: #000; padding: 1px 5px; border-radius: 3px; }
+    .ld-detail { font-size: .6rem; color: rgba(255,255,255,.3); padding: 0 0 5px 61px; }
+
+    /* section headings inside panel */
+    .panel-hd {
+        font-size: .67rem; text-transform: uppercase; letter-spacing: .1em;
+        color: var(--primary-color); margin: 12px 0 8px;
+        display: flex; align-items: center; gap: 6px;
+    }
+    .panel-hd::after { content:''; flex:1; height:1px; background:rgba(0,212,255,.18); }
+
+    /* status dot */
+    .sdot { width:8px; height:8px; border-radius:50%;
+            display:inline-block; margin-right:5px;
+            animation: blink 1.2s ease-in-out infinite; }
+    .sdot.on  { background:#00cc55; }
+    .sdot.off { background:#888; animation:none; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+</style>
+{% endblock %}
+
+
+{% block content %}
+<div class="container py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="mb-1">Input Stream Analysis</h2>
+            <p class="text-muted">Inject media for real-time neural inference + AI traffic signal prediction</p>
+        </div>
+    </div>
+
+    <div class="row g-4">
+
+        <!-- ════════════════════════════════════════════
+             LEFT — Input & Preview  (original layout)
+        ════════════════════════════════════════════ -->
+        <div class="col-lg-8">
+            <div class="input-card">
+                <ul class="nav nav-tabs" role="tablist">
+                    <li class="nav-item">
+                        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-image">
+                            <i class="fas fa-image me-2"></i>Image
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-video">
+                            <i class="fas fa-video me-2"></i>Video
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-camera">
+                            <i class="fas fa-camera me-2"></i>Live Feed
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content p-4">
+
+                    <!-- Image Tab -->
+                    <div class="tab-pane fade show active" id="tab-image">
+                        <div class="upload-zone" id="drop-zone-image"
+                             onclick="document.getElementById('file-image').click()">
+                            <i class="fas fa-cloud-upload-alt upload-icon"></i>
+                            <h4>Drop Image File</h4>
+                            <p class="text-muted mb-0">or click to browse system</p>
+                            <input type="file" id="file-image" hidden accept="image/*">
+                        </div>
+
+                        <div id="preview-container-image" class="mt-4 d-none">
+                            <div class="preview-box">
+                                <img id="img-preview" class="preview-media" src="" alt="preview">
+                                <canvas id="canvas-image" class="overlay-canvas"></canvas>
+                                <div id="loader-image"
+                                     class="position-absolute d-none d-flex
+                                            align-items-center justify-content-center"
+                                     style="inset:0; background:rgba(0,0,0,.55);">
+                                    <div class="spinner-cyber"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Video Tab -->
+                    <div class="tab-pane fade" id="tab-video">
+                        <div class="upload-zone" id="drop-zone-video"
+                             onclick="document.getElementById('file-video').click()">
+                            <i class="fas fa-film upload-icon"></i>
+                            <h4>Drop Video File</h4>
+                            <p class="text-muted mb-0">MP4, AVI, MOV supported</p>
+                            <input type="file" id="file-video" hidden accept="video/*">
+                        </div>
+
+                        <div id="video-progress-wrap" class="mt-3 d-none">
+                            <div class="d-flex justify-content-between mb-1">
+                                <small class="text-muted">Processing frames…</small>
+                                <small id="video-pct" class="text-primary">0%</small>
+                            </div>
+                            <div class="progress" style="height:6px;">
+                                <div id="video-bar" class="progress-bar bg-info" style="width:0%"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Camera Tab -->
+                    <div class="tab-pane fade" id="tab-camera">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="mb-0 text-white">
+                                <span id="cam-dot" class="sdot off"></span>Live Surveillance Feed
+                            </h5>
+                            <div>
+                                <button class="btn btn-outline-danger btn-sm me-2"
+                                        id="btn-stop-cam" disabled>Stop</button>
+                                <button class="btn btn-success btn-sm"
+                                        id="btn-start-cam">Initialize Camera</button>
+                            </div>
+                        </div>
+                        <div class="preview-box">
+                            <img id="camera-feed" class="preview-media"
+                                 style="width:100%;height:100%;object-fit:cover;display:none;" alt="camera">
+                            <div id="camera-placeholder" class="text-center text-muted">
+                                <i class="fas fa-video-slash fa-3x mb-3"></i>
+                                <p>Camera Offline</p>
+                            </div>
+                            <canvas id="canvas-camera" class="overlay-canvas"></canvas>
+                        </div>
+                    </div>
+
+                </div><!-- /tab-content -->
+            </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════
+             RIGHT — Stats + Intelligence Panel
+        ════════════════════════════════════════════ -->
+        <div class="col-lg-4">
+
+            <!-- Original vehicle-count card -->
+            <div class="input-card p-4 mb-3">
+                <h5 class="mb-4 text-primary"><i class="fas fa-chart-bar me-2"></i>Analysis Results</h5>
+
+                <div class="stats-container" id="results-panel">
+                    <div class="stats-badge">
+                        <span class="text-info"><i class="fas fa-car me-2"></i>Cars</span>
+                        <span class="count-number text-white" id="count-car">0</span>
+                    </div>
+                    <div class="stats-badge">
+                        <span class="text-success"><i class="fas fa-motorcycle me-2"></i>Motorcycles</span>
+                        <span class="count-number text-white" id="count-motorcycle">0</span>
+                    </div>
+                    <div class="stats-badge">
+                        <span class="text-secondary"><i class="fas fa-bicycle me-2"></i>Bicycles</span>
+                        <span class="count-number text-white" id="count-bicycle">0</span>
+                    </div>
+                    <div class="stats-badge">
+                        <span class="text-warning"><i class="fas fa-bus me-2"></i>Buses</span>
+                        <span class="count-number text-white" id="count-bus">0</span>
+                    </div>
+                    <div class="stats-badge">
+                        <span class="text-danger"><i class="fas fa-truck me-2"></i>Trucks</span>
+                        <span class="count-number text-white" id="count-truck">0</span>
+                    </div>
+
+                    <hr class="border-secondary my-3">
+
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">Total Vehicles:</span>
+                        <span class="fw-bold text-white" id="total-count">0</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="text-muted">Inference Time:</span>
+                        <span class="fw-bold text-primary"><span id="inf-time">0</span> ms</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ════════════════════════════════════
+                 TRAFFIC INTELLIGENCE PANEL
+                 Shown only after first detection
+            ════════════════════════════════════ -->
+            <div class="input-card p-4" id="intel-panel">
+
+                <h5 class="mb-0 text-primary">
+                    <i class="fas fa-brain me-2"></i>AI Traffic Intelligence
+                </h5>
+                <p class="text-muted" style="font-size:.68rem;margin-top:2px;margin-bottom:10px;">
+                    Detection → Density → Signal → Duration
+                </p>
+
+                <!-- Pipeline trace -->
+                <div class="panel-hd"><i class="fas fa-sitemap me-1"></i>Pipeline Trace</div>
+                <div class="pipeline-steps">
+                    <div class="ps-row">
+                        <div class="ps-num">1</div>
+                        <div>
+                            <div class="ps-label">Feature Extraction</div>
+                            <div class="ps-value" id="ps1">—</div>
+                        </div>
+                    </div>
+                    <div class="ps-row">
+                        <div class="ps-num">2</div>
+                        <div>
+                            <div class="ps-label">Road Occupancy Score</div>
+                            <div class="ps-value" id="ps2">—</div>
+                        </div>
+                    </div>
+                    <div class="ps-row">
+                        <div class="ps-num">3</div>
+                        <div>
+                            <div class="ps-label">Signal Prediction</div>
+                            <div class="ps-value" id="ps3">—</div>
+                        </div>
+                    </div>
+                    <div class="ps-row">
+                        <div class="ps-num">4</div>
+                        <div>
+                            <div class="ps-label">Green Duration</div>
+                            <div class="ps-value" id="ps4">—</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Signal recommendation -->
+                <div class="panel-hd"><i class="fas fa-traffic-light me-1"></i>Signal Decision</div>
+                <div class="signal-card LOW" id="signal-card">
+                    <span class="sc-icon" id="sc-icon">🟢</span>
+                    <div class="sc-lane" id="sc-lane">WAITING</div>
+                    <div class="sc-dur"  id="sc-dur">— sec green time</div>
+                    <div class="sc-reason" id="sc-reason">Upload image or start camera to see prediction</div>
+                </div>
+
+                <!-- Lane density bars -->
+                <div class="panel-hd"><i class="fas fa-bars me-1"></i>Lane Density</div>
+                <div id="lane-bars">
+                    <p class="text-muted small text-center py-2">No data yet</p>
+                </div>
+
+            </div><!-- /intel-panel -->
+
+        </div><!-- /col-lg-4 -->
+    </div><!-- /row -->
+</div><!-- /container -->
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+/* ================================================================
+   input.html — Traffic Intelligence JS
+   Connects:
+     POST /api/detect/image  → data.traffic_analysis
+     POST /api/detect/video  → data.traffic_analysis
+     WS   camera_frame       → frameData.traffic_analysis
+     WS   traffic_intelligence → summary object
+================================================================ */
+
+// ── helpers ────────────────────────────────────────────────────
+const $id = id => document.getElementById(id);
+const canvas = $id('canvas-image');
+const ctx    = canvas.getContext('2d');
+
+// ── draw bounding boxes on canvas ──────────────────────────────
+function drawBoxes(boxes) {
+    const colorMap = {
+        cars:'#00ff9d', motorcycles:'#ffdd00',
+        bicycles:'#aaaaaa', buses:'#ff9900', trucks:'#ff3355'
+    };
+    ctx.lineWidth = 3;
+    ctx.font = '13px Orbitron, monospace';
+
+    boxes.forEach(box => {
+        const [x1, y1, x2, y2] = box.bbox;
+        const color = colorMap[box.type] || '#00f2ff';
+        const lane  = box.lane || '';
+
+        ctx.strokeStyle = color;
+        ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+
+        // label background + text
+        const label = `${box.class} [${lane}] ${Math.round(box.confidence * 100)}%`;
+        const lw = ctx.measureText(label).width + 8;
+        ctx.fillStyle = color;
+        ctx.fillRect(x1, Math.max(y1 - 22, 0), lw, 22);
+        ctx.fillStyle = '#000';
+        ctx.fillText(label, x1 + 4, Math.max(y1 - 6, 14));
+    });
+}
+
+// ── original updateStats (kept as-is, renamed for clarity) ─────
+function updateStats(counts, timeVal) {
+    $id('count-car').innerText        = counts.cars        || 0;
+    $id('count-motorcycle').innerText = counts.motorcycles || counts.bikes || 0;
+    $id('count-bicycle').innerText    = counts.bicycles    || 0;
+    $id('count-bus').innerText        = counts.buses       || 0;
+    $id('count-truck').innerText      = counts.trucks      || 0;
+
+    const total = counts.total !== undefined
+        ? counts.total
+        : Object.values(counts).reduce((s, v) => s + (typeof v === 'number' ? v : 0), 0);
+    $id('total-count').innerText = total;
+    $id('inf-time').innerText    = timeVal > 0 ? (timeVal * 1000).toFixed(0) : 'N/A';
+}
+
+// ════════════════════════════════════════════════════════════════
+//  INTELLIGENCE PANEL RENDERER
+//  Reads the traffic_analysis object returned by the backend
+//  and populates the 4-step trace + signal card + lane bars.
+// ════════════════════════════════════════════════════════════════
+function renderIntel(ta) {
+    if (!ta) return;
+
+    // make panel visible
+    $id('intel-panel').classList.add('show');
+
+    const summary = ta.summary || ta;   // works with full result or summary-only
+
+    // ── Step 1 ─────────────────────────────────────────────────
+    const feat      = ta.step1_features || {};
+    const active    = Object.keys(feat).filter(l => feat[l].total > 0);
+    $id('ps1').textContent = Object.keys(feat).length
+        ? `${active.length} active lane(s) of ${Object.keys(feat).length} detected`
+        : 'Lane features extracted';
+
+    // ── Step 2 ─────────────────────────────────────────────────
+    const density   = ta.step2_density || {};
+    const scores    = Object.values(density).map(d => d.score || 0);
+    const maxScore  = scores.length ? Math.max(...scores) : (summary.density_score || 0);
+    $id('ps2').textContent = `Peak occupancy: ${maxScore.toFixed(1)} pts`;
+
+    // ── Step 3 ─────────────────────────────────────────────────
+    const pLane = summary.priority_lane || '—';
+    $id('ps3').textContent = `GREEN → ${pLane}`;
+
+    // ── Step 4 ─────────────────────────────────────────────────
+    const dur   = summary.green_duration || 0;
+    const level = summary.density_level  || 'LOW';
+    $id('ps4').textContent = `${dur}s  [${level}]`;
+
+    // ── Signal card ─────────────────────────────────────────────
+    const card  = $id('signal-card');
+    card.className = `signal-card ${level}`;
+    const icons = { LOW:'🟢', MEDIUM:'🟡', HIGH:'🟠', CRITICAL:'🔴' };
+    $id('sc-icon').textContent  = icons[level]  || '🟢';
+    $id('sc-lane').textContent  = pLane;
+    $id('sc-dur').textContent   = `${dur} sec green time`;
+    $id('sc-reason').textContent = summary.reason || '';
+
+    // ── Lane density bars ───────────────────────────────────────
+    const wrap    = $id('lane-bars');
+    wrap.innerHTML = '';
+    const ranking = summary.lane_ranking || [];
+    const maxRank  = ranking.length ? Math.max(...ranking.map(r => r.score), 0.1) : 1;
+
+    if (!ranking.length) {
+        wrap.innerHTML = '<p class="text-muted small text-center py-2">No lane data</p>';
+        return;
+    }
+
+    ranking.forEach(item => {
+        const pct = Math.round((item.score / maxRank) * 100);
+
+        const row = document.createElement('div');
+        row.className = 'ld-row';
+        row.innerHTML = `
+            <div class="ld-name">${item.lane}</div>
+            <div class="ld-track">
+                <div class="ld-fill ${item.level}" style="width:${pct}%"></div>
+            </div>
+            <div class="ld-score">${item.score.toFixed(1)}</div>
+            <div class="ld-level">${item.level}</div>
+            ${item.is_priority ? '<span class="ld-green">▲ GREEN</span>' : ''}
+        `;
+        wrap.appendChild(row);
+
+        // vehicle detail sub-row
+        const sub = document.createElement('div');
+        sub.className = 'ld-detail';
+        sub.textContent =
+            `Car:${item.cars}  Moto:${item.motorcycles}  Bus:${item.buses}`+
+            `  Truck:${item.trucks}  Cyc:${item.bicycles}`;
+        wrap.appendChild(sub);
+    });
+}
+
+// ════════════════════════════════════════════════════════════════
+//  IMAGE UPLOAD  (same logic as original, + traffic_analysis)
+// ════════════════════════════════════════════════════════════════
+const fileInput = $id('file-image');
+fileInput.addEventListener('change', handleFileSelect);
+
+function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = ev => {
+        const imgEl = $id('img-preview');
+        imgEl.src = ev.target.result;
+        $id('preview-container-image').classList.remove('d-none');
+        imgEl.onload = () => {
+            canvas.width  = imgEl.width  || imgEl.naturalWidth;
+            canvas.height = imgEl.height || imgEl.naturalHeight;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            uploadAndDetect(file, imgEl);
+        };
+    };
+    reader.readAsDataURL(file);
+}
+
+function uploadAndDetect(file, imgEl) {
+    const formData = new FormData();
+    formData.append('image', file);
+    $id('loader-image').classList.remove('d-none');
+
+    fetch('/api/detect/image', { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(data => {
+            $id('loader-image').classList.add('d-none');
+
+            if (!data.success) { alert('Error: ' + data.error); return; }
+
+            // prefer server-annotated image (contains intel overlay)
+            if (data.annotated_image) {
+                imgEl.src = `data:image/jpeg;base64,${data.annotated_image}`;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            } else if (data.results && data.results.bounding_boxes) {
+                drawBoxes(data.results.bounding_boxes);
+            }
+
+            updateStats(data.results.detections, data.processing_time);
+
+            // ── render intelligence panel ──────────────────────
+            if (data.traffic_analysis) renderIntel(data.traffic_analysis);
+        })
+        .catch(err => {
+            $id('loader-image').classList.add('d-none');
+            console.error(err);
+            alert('Upload failed: ' + err.message);
+        });
+}
+
+// ── drag-and-drop on image zone ─────────────────────────────────
+const dropZone = $id('drop-zone-image');
+['dragenter', 'dragover'].forEach(ev =>
+    dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.add('active'); }));
+['dragleave', 'drop'].forEach(ev =>
+    dropZone.addEventListener(ev, e => {
+        e.preventDefault(); dropZone.classList.remove('active');
+        if (ev === 'drop' && e.dataTransfer.files.length) {
+            const dt = new DataTransfer();
+            dt.items.add(e.dataTransfer.files[0]);
+            $id('file-image').files = dt.files;
+            $id('file-image').dispatchEvent(new Event('change'));
+        }
+    }));
+
+// ════════════════════════════════════════════════════════════════
+//  VIDEO UPLOAD  (original logic preserved + traffic_analysis)
+// ════════════════════════════════════════════════════════════════
+$id('file-video').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (file) uploadVideo(file);
+});
+
+function uploadVideo(file) {
+    const formData = new FormData();
+    formData.append('video', file);
+
+    const wrap = $id('video-progress-wrap');
+    const bar  = $id('video-bar');
+    const pct  = $id('video-pct');
+    wrap.classList.remove('d-none');
+
+    if (window.trafficSystem && window.trafficSystem.socket) {
+        window.trafficSystem.socket.on('video_progress', prog => {
+            const p = Math.round(prog.progress || 0);
+            bar.style.width  = p + '%';
+            pct.textContent  = p + '%';
+        });
+    }
+
+    fetch('/api/detect/video', { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(data => {
+            wrap.classList.add('d-none');
+            if (window.trafficSystem && window.trafficSystem.socket)
+                window.trafficSystem.socket.off('video_progress');
+
+            if (!data.success) { alert('Video Error: ' + data.error); return; }
+
+            updateStats(data.results, 0);
+
+            // ── render intelligence panel ──────────────────────
+            if (data.traffic_analysis) renderIntel(data.traffic_analysis);
+
+            const ta = data.traffic_analysis?.summary || {};
+            alert(
+                `✅ Video processed!\n`+
+                `Frames analysed : ${data.frames_processed}\n`+
+                `Priority lane   : ${ta.priority_lane   || '—'}\n`+
+                `Density level   : ${ta.density_level   || '—'}\n`+
+                `Green duration  : ${ta.green_duration  || '—'} sec`
+            );
+        })
+        .catch(err => {
+            wrap.classList.add('d-none');
+            alert('Video upload failed: ' + err.message);
+        });
+}
+
+// ════════════════════════════════════════════════════════════════
+//  LIVE CAMERA  (original logic preserved + traffic_analysis)
+// ════════════════════════════════════════════════════════════════
+const btnStart = $id('btn-start-cam');
+const btnStop  = $id('btn-stop-cam');
+const camFeed  = $id('camera-feed');
+const camPlace = $id('camera-placeholder');
+const camDot   = $id('cam-dot');
+
+btnStart.addEventListener('click', () => {
+    camPlace.style.display = 'none';
+    camFeed.style.display  = 'block';
+    camDot.className       = 'sdot on';
+    btnStart.disabled      = true;
+    btnStop.disabled       = false;
+
+    if (window.trafficSystem && window.trafficSystem.socket) {
+        window.trafficSystem.socket.on('camera_frame', fd => {
+            camFeed.src = `data:image/jpeg;base64,${fd.image}`;
+
+            if (fd.detections) updateStats(fd.detections.detections || fd.detections, 0.033);
+
+            // ── render intelligence panel from camera frame ────
+            if (fd.traffic_analysis) renderIntel({ summary: fd.traffic_analysis });
+        });
+
+        // also listen for standalone intelligence events
+        window.trafficSystem.socket.on('traffic_intelligence', summary => {
+            renderIntel({ summary });
+        });
+    }
+
+    fetch('/api/camera/start', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) {
+                alert('Failed to start camera: ' + data.error);
+                btnStart.disabled = false; btnStop.disabled = true;
+                camFeed.style.display  = 'none';
+                camPlace.style.display = 'block';
+                camDot.className = 'sdot off';
+            }
+        });
+});
+
+btnStop.addEventListener('click', () => {
+    camFeed.style.display  = 'none';
+    camPlace.style.display = 'block';
+    camDot.className       = 'sdot off';
+    btnStart.disabled      = false;
+    btnStop.disabled       = true;
+
+    if (window.trafficSystem && window.trafficSystem.socket) {
+        window.trafficSystem.socket.off('camera_frame');
+        window.trafficSystem.socket.off('traffic_intelligence');
+    }
+    fetch('/api/camera/stop', { method: 'POST' });
+});
+</script>
+{% endblock %}

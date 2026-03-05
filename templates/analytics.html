@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics Hub - Smart City{% endblock %}
+
+{% block head %}
+<style>
+    .analytics-card {
+        background: var(--bg-card);
+        border: 1px solid var(--glass-border);
+        border-radius: 12px;
+        padding: 1.5rem;
+        height: 100%;
+    }
+
+    .chart-container {
+        position: relative;
+        height: 300px;
+        width: 100%;
+    }
+
+    .stat-value-lg {
+        font-family: 'Orbitron', sans-serif;
+        font-size: 2.5rem;
+        font-weight: 700;
+        background: linear-gradient(to right, #fff, #a0a0a0);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    .trend-badge {
+        font-size: 0.9rem;
+        padding: 4px 8px;
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    .trend-up {
+        color: var(--accent-success);
+    }
+
+    .trend-down {
+        color: var(--accent-danger);
+    }
+
+    .table-dark-custom {
+        background: transparent;
+        color: var(--text-main);
+    }
+
+    .table-dark-custom th {
+        border-bottom: 2px solid var(--glass-border);
+        color: var(--primary-color);
+        font-weight: 600;
+    }
+
+    .table-dark-custom td {
+        border-bottom: 1px solid var(--glass-border);
+        vertical-align: middle;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1">Traffic Data Intelligence</h2>
+            <p class="text-muted">Historical analysis and predictive modeling</p>
+        </div>
+        <div>
+            <button class="btn btn-outline-primary" onclick="window.print()">
+                <i class="fas fa-download me-2"></i>Export Report
+            </button>
+        </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="analytics-card">
+                <h6 class="text-muted text-uppercase">Avg Speed</h6>
+                <div class="d-flex align-items-end justify-content-between">
+                    <div class="stat-value-lg">42.8</div>
+                    <div class="trend-badge trend-up">
+                        <i class="fas fa-arrow-up me-1"></i>12%
+                    </div>
+                </div>
+                <div class="text-muted small mt-2">km/h across network</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="analytics-card">
+                <h6 class="text-muted text-uppercase">Congestion Index</h6>
+                <div class="d-flex align-items-end justify-content-between">
+                    <div class="stat-value-lg" style="-webkit-text-fill-color: var(--accent-warning);">Medium</div>
+                    <div class="trend-badge trend-down">
+                        <i class="fas fa-arrow-down me-1"></i>5%
+                    </div>
+                </div>
+                <div class="text-muted small mt-2">Peak hour intensity</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="analytics-card">
+                <h6 class="text-muted text-uppercase">Signal Efficiency</h6>
+                <div class="d-flex align-items-end justify-content-between">
+                    <div class="stat-value-lg" style="-webkit-text-fill-color: var(--accent-success);">94%</div>
+                    <div class="trend-badge trend-up">
+                        <i class="fas fa-check me-1"></i>Optimal
+                    </div>
+                </div>
+                <div class="text-muted small mt-2">Green light utilization</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="analytics-card">
+                <h6 class="text-muted text-uppercase">Total Volume</h6>
+                <div class="d-flex align-items-end justify-content-between">
+                    <div class="stat-value-lg">12.5k</div>
+                    <div class="trend-badge text-muted">
+                        <i class="fas fa-minus me-1"></i>Stable
+                    </div>
+                </div>
+                <div class="text-muted small mt-2">Vehicles today</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row 1 -->
+    <div class="row g-4 mb-4">
+        <div class="col-lg-8">
+            <div class="analytics-card">
+                <h5 class="mb-4">Traffic Volume Trends (24h)</h5>
+                <div class="chart-container">
+                    <canvas id="volumeChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="analytics-card">
+                <h5 class="mb-4">Vehicle Distribution</h5>
+                <div class="chart-container">
+                    <canvas id="pieChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="analytics-card">
+                <h5 class="mb-3">Recent Congestion Events</h5>
+                <div class="table-responsive">
+                    <table class="table table-dark-custom align-middle">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Location</th>
+                                <th>Severity</th>
+                                <th>Avg Speed</th>
+                                <th>Duration</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>09:15 AM</td>
+                                <td>Gandhipuram Junction</td>
+                                <td><span class="badge bg-danger">HIGH</span></td>
+                                <td>12 km/h</td>
+                                <td>25 min</td>
+                                <td>Resolved</td>
+                            </tr>
+                            <tr>
+                                <td>10:30 AM</td>
+                                <td>Avinashi Road</td>
+                                <td><span class="badge bg-warning text-dark">MEDIUM</span></td>
+                                <td>28 km/h</td>
+                                <td>15 min</td>
+                                <td>Resolved</td>
+                            </tr>
+                            <tr>
+                                <td>05:45 PM</td>
+                                <td>RS Puram</td>
+                                <td><span class="badge bg-danger">HIGH</span></td>
+                                <td>10 km/h</td>
+                                <td>40 min</td>
+                                <td>Active</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // --- Chart Themes ---
+    Chart.defaults.color = '#a0a0a0';
+    Chart.defaults.borderColor = 'rgba(255,255,255,0.1)';
+    Chart.defaults.font.family = "'Roboto', sans-serif";
+
+    // --- Volume Line Chart ---
+    const ctxVol = document.getElementById('volumeChart').getContext('2d');
+    const volumeChart = new Chart(ctxVol, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Vehicles/Hour',
+                data: [],
+                backgroundColor: 'rgba(0, 242, 255, 0.1)',
+                borderColor: '#00f2ff',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4,
+                pointRadius: 3,
+                pointBackgroundColor: '#000'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: { grid: { borderDash: [5, 5] }, beginAtZero: true },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+
+    // --- Vehicle Pie Chart ---
+    const ctxPie = document.getElementById('pieChart').getContext('2d');
+    const pieChart = new Chart(ctxPie, {
+        type: 'doughnut',
+        data: {
+            labels: ['Cars', 'Bikes', 'Buses', 'Trucks'],
+            datasets: [{
+                data: [0, 0, 0, 0],
+                backgroundColor: [
+                    '#00f2ff', // Car
+                    '#00ff9d', // Bike
+                    '#ffbf00', // Bus
+                    '#ff0055'  // Truck
+                ],
+                borderWidth: 0,
+                hoverOffset: 10
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'right' }
+            }
+        }
+    });
+
+    // Fetch Analytics Data
+    function loadAnalytics() {
+        // Fetch Live Stats for Pie Chart and Total Volume
+        fetch('/api/stats')
+            .then(res => res.json())
+            .then(data => {
+                if (data.total_detections) {
+                    const d = data.total_detections;
+                    pieChart.data.datasets[0].data = [
+                        d.cars || 0,
+                        (d.motorcycles || 0) + (d.bicycles || 0),
+                        d.buses || 0,
+                        d.trucks || 0
+                    ];
+                    pieChart.update();
+                }
+                if (data.vehicle_count !== undefined) {
+                    document.querySelector(".stat-value-lg:nth-child(1)").innerText = data.vehicle_count > 1000 ? (data.vehicle_count / 1000).toFixed(1) + 'k' : data.vehicle_count;
+                }
+            })
+            .catch(err => console.error("Error loading live stats:", err));
+
+        // Fetch CMP Data for Volume Trend line chart
+        fetch('/api/cmp/dashboard-summary')
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.step4_simulation) {
+                    const simData = Object.values(data.step4_simulation);
+                    const hours = ["07:00", "08:00", "09:00", "10:00", "11:00", "12:00", "18:00", "19:00", "20:00"];
+                    volumeChart.data.labels = hours;
+
+                    // Roughly map CMP peaks for demonstration
+                    const points = [
+                        simData.reduce((acc, v) => acc + (v.off_peak_veh_hr || 0), 0) / simData.length,
+                        simData.reduce((acc, v) => acc + (v.morning_peak_veh_hr || 0) * 0.8, 0) / simData.length,
+                        simData.reduce((acc, v) => acc + (v.morning_peak_veh_hr || 0), 0) / simData.length,
+                        simData.reduce((acc, v) => acc + (v.morning_peak_veh_hr || 0) * 0.7, 0) / simData.length,
+                        simData.reduce((acc, v) => acc + (v.off_peak_veh_hr || 0) * 1.1, 0) / simData.length,
+                        simData.reduce((acc, v) => acc + (v.off_peak_veh_hr || 0), 0) / simData.length,
+                        simData.reduce((acc, v) => acc + (v.evening_peak_veh_hr || 0) * 0.8, 0) / simData.length,
+                        simData.reduce((acc, v) => acc + (v.evening_peak_veh_hr || 0), 0) / simData.length,
+                        simData.reduce((acc, v) => acc + (v.evening_peak_veh_hr || 0) * 0.7, 0) / simData.length,
+                    ];
+
+                    volumeChart.data.datasets[0].data = points;
+                    volumeChart.update();
+                }
+            })
+            .catch(err => console.error("Error loading CMP summary:", err));
+    }
+
+    // Initialize
+    loadAnalytics();
+    setInterval(loadAnalytics, 10000); // 10s refresh
+
+</script>
+{% endblock %}
