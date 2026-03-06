@@ -99,8 +99,7 @@ VEHICLE_WEIGHTS = {'bicycles': 0.5, 'motorcycles': 0.5, 'cars': 1.0, 'buses': 3.
 DENSITY_THRESHOLDS = {'CRITICAL': 12, 'HIGH': 8, 'MEDIUM': 4}
 
 # ──────────────────────────────────────────────
-# GLOBAL CAMERA STATE  (FIX: use a single object
-#  so camera_thread closure always reads latest)
+# GLOBAL CAMERA STATE
 # ──────────────────────────────────────────────
 camera_state = {
     'cap':    None,
@@ -111,7 +110,7 @@ camera_state = {
 detection_history = []
 
 # ──────────────────────────────────────────────
-# FLASK / SOCKETIO INIT
+# FLASK / SOCKETIO INIT  (eventlet for Render)
 # ──────────────────────────────────────────────
 app = Flask(__name__, static_folder=STATIC_FOLDER, template_folder=STATIC_FOLDER)
 app.config['SECRET_KEY']           = os.getenv('FLASK_SECRET', 'dev_secret_key')
@@ -120,7 +119,7 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    async_mode='threading',
+    async_mode='eventlet',          # eventlet works on Render
     max_http_buffer_size=100 * 1024 * 1024,
     ping_timeout=60,
     ping_interval=25,
@@ -148,7 +147,7 @@ app.json_encoder = CustomJSONEncoder
 
 
 # ══════════════════════════════════════════════
-# GEOCODING SERVICE  (FIX: robust fallback + OSRM routing)
+# GEOCODING SERVICE
 # ══════════════════════════════════════════════
 class GeocodingService:
     FALLBACK = {
@@ -195,13 +194,10 @@ class GeocodingService:
     def geocode_location(self, location_name: str) -> dict:
         if location_name in self.cache:
             return self.cache[location_name]
-
-        # try fallback dict first (fast, no network)
         fb = self._fallback_lookup(location_name)
         if fb:
             self.cache[location_name] = fb
             return fb
-
         if self.available:
             try:
                 loc = self.geolocator.geocode(f"{location_name}, Coimbatore, Tamil Nadu, India")
@@ -212,7 +208,6 @@ class GeocodingService:
                     return result
             except Exception as e:
                 logger.error(f"Geocoding error: {e}")
-
         return {'success': False, 'error': f'Location "{location_name}" not found'}
 
     def search_locations(self, query: str) -> dict:
@@ -221,7 +216,6 @@ class GeocodingService:
         for name, coords in self.FALLBACK.items():
             if q in name:
                 results.append({'name': coords['display'], 'lat': coords['lat'], 'lng': coords['lng']})
-
         if self.available and len(results) < 3:
             try:
                 locs = self.geolocator.geocode(
@@ -233,20 +227,13 @@ class GeocodingService:
                         results.append({'name': l.address, 'lat': l.latitude, 'lng': l.longitude})
             except Exception as e:
                 logger.error(f"Search error: {e}")
-
         return {'success': True, 'results': results[:10]}
 
 
 # ══════════════════════════════════════════════
-# ROAD NETWORK  (FIX: OSRM for accurate routing)
+# ROAD NETWORK
 # ══════════════════════════════════════════════
 class CoimbatoreRoadNetwork:
-    """
-    Uses OSRM public demo server for real road-following routes.
-    Falls back to straight-line when OSRM is unreachable.
-    OSMnx is used for local graph analytics if available.
-    """
-
     OSRM_BASE = "https://router.project-osrm.org/route/v1/driving"
 
     def __init__(self):
@@ -255,7 +242,6 @@ class CoimbatoreRoadNetwork:
         self.intersections = []
         self._init_graph()
 
-    # ── graph init ──────────────────────────────
     def _init_graph(self):
         if NETWORKX_AVAILABLE and OSMNX_AVAILABLE:
             try:
@@ -271,7 +257,6 @@ class CoimbatoreRoadNetwork:
                 return
             except Exception as e:
                 logger.warning(f"OSM graph failed ({e}), using fallback")
-
         self._init_fallback()
 
     def _seed_congestion(self):
@@ -314,10 +299,8 @@ class CoimbatoreRoadNetwork:
                 self.graph['nodes'][i] = {'y': lat, 'x': lng, 'name': name}
                 self.intersections.append({'id': i, 'lat': lat, 'lng': lng, 'name': name, 'degree': 2})
 
-    # ── helpers ─────────────────────────────────
     @staticmethod
     def _haversine(lat1, lng1, lat2, lng2) -> float:
-        """Returns distance in km."""
         R = 6371.0
         phi1, phi2 = math.radians(lat1), math.radians(lat2)
         dphi = math.radians(lat2 - lat1)
@@ -325,34 +308,20 @@ class CoimbatoreRoadNetwork:
         a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
         return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
-    # ── FIX: OSRM-based accurate routing ────────
     def get_route_with_real_roads(self, slat, slng, elat, elng, vehicle_type="car"):
-        """
-        Primary: OSRM public demo API  →  actual road-following polyline.
-        Fallback: NetworkX shortest-path on local OSM graph.
-        Last resort: straight line.
-        """
-        # ── 1. Try OSRM ──────────────────────────
         try:
             url = (f"{self.OSRM_BASE}/{slng},{slat};{elng},{elat}"
                    f"?overview=full&geometries=geojson&steps=false")
             resp = requests.get(url, timeout=8)
             data = resp.json()
-
             if data.get('code') == 'Ok' and data.get('routes'):
                 route_data  = data['routes'][0]
                 distance_km = route_data['distance'] / 1000
                 duration_m  = route_data['duration'] / 60
-
-                # vehicle speed penalty
                 speed_factor = {'truck': 0.7, 'motorcycle': 1.1, 'bus': 0.75}.get(vehicle_type, 1.0)
                 duration_m  /= speed_factor
-
-                # coords from GeoJSON [lng, lat] → [[lat, lng], …]
                 coords_raw = route_data['geometry']['coordinates']
                 route_coords = [[c[1], c[0]] for c in coords_raw]
-
-                logger.info(f"OSRM route: {distance_km:.2f} km, {duration_m:.1f} min, {len(route_coords)} pts")
                 return {
                     'success': True,
                     'route':           route_coords,
@@ -365,7 +334,6 @@ class CoimbatoreRoadNetwork:
         except Exception as e:
             logger.warning(f"OSRM request failed: {e}. Trying local graph.")
 
-        # ── 2. Try local NetworkX graph ───────────
         if NETWORKX_AVAILABLE and hasattr(self.graph, 'edges'):
             try:
                 snode = self._nearest_node(slat, slng)
@@ -399,7 +367,6 @@ class CoimbatoreRoadNetwork:
             except Exception as e:
                 logger.warning(f"Local graph routing failed: {e}")
 
-        # ── 3. Straight-line fallback ─────────────
         dist_km = self._haversine(slat, slng, elat, elng)
         dur_m   = (dist_km / 50) * 60
         return {
@@ -415,7 +382,6 @@ class CoimbatoreRoadNetwork:
                 return ox.distance.nearest_nodes(self.graph, lng, lat)
             except Exception:
                 pass
-        # manual search
         min_d, nearest = float('inf'), None
         nodes = self.graph.nodes(data=True) if hasattr(self.graph, 'nodes') else []
         for nid, data in nodes:
@@ -547,7 +513,6 @@ class VehicleDetector:
         except Exception as e:
             logger.error(f"YOLO load failed: {e}")
 
-    # ── simulate detections when YOLO unavailable ──
     def _simulate(self, image):
         h, w = image.shape[:2]
         vt   = ['cars', 'motorcycles', 'bicycles', 'buses', 'trucks']
@@ -616,7 +581,6 @@ class VehicleDetector:
             cv2.rectangle(image, (x1,y1), (x2,y2), color, 2)
             lbl = f"{bb['type'][:-1]} [{bb.get('lane','')}] {int(bb['confidence']*100)}%"
             cv2.putText(image, lbl, (x1, max(y1-10,15)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-
         if traffic_analysis:
             s  = traffic_analysis.get('summary', traffic_analysis)
             lr = s.get('lane_ranking', [])
@@ -649,7 +613,7 @@ class VehicleDetector:
 
 
 # ══════════════════════════════════════════════
-# TRAFFIC INTELLIGENCE ENGINE  (Steps 1-4)
+# TRAFFIC INTELLIGENCE ENGINE
 # ══════════════════════════════════════════════
 class TrafficIntelligence:
     @staticmethod
@@ -738,8 +702,8 @@ class TrafficIntelligence:
 # ══════════════════════════════════════════════
 def init_database():
     try:
-        conn   = sqlite3.connect('traffic_analytics.db', check_same_thread=False)
-        cur    = conn.cursor()
+        conn = sqlite3.connect('traffic_analytics.db', check_same_thread=False)
+        cur  = conn.cursor()
         cur.execute('''CREATE TABLE IF NOT EXISTS detection_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
             detection_type TEXT, file_name TEXT, total_vehicles INTEGER,
@@ -820,8 +784,6 @@ def api_signal_status():
         'emergency_mode': signal_controller.emergency_override,
     })
 
-
-# ── Geocoding / Routing ─────────────────────
 @app.route('/api/geocode/search', methods=['POST'])
 def api_geocode_search():
     data  = request.get_json() or {}
@@ -845,7 +807,6 @@ def api_calculate_route():
         start        = data.get('start')
         end          = data.get('end')
         vehicle_type = data.get('vehicle_type', 'car')
-
         if not start or not end:
             return jsonify({'success': False, 'error': 'start and end required'}), 400
 
@@ -863,7 +824,6 @@ def api_calculate_route():
             return jsonify({'success': False, 'error': 'Could not geocode one or both locations'}), 400
 
         result = road_network.get_route_with_real_roads(slat, slng, elat, elng, vehicle_type)
-
         try:
             conn = sqlite3.connect('traffic_analytics.db')
             conn.execute('INSERT INTO route_logs (start_location,end_location,distance,estimated_time,vehicle_type) VALUES (?,?,?,?,?)',
@@ -872,28 +832,25 @@ def api_calculate_route():
             conn.commit(); conn.close()
         except Exception:
             pass
-
         return jsonify(result)
     except Exception as e:
         logger.error(f"Route API error: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-# ── Image Detection ─────────────────────────
 @app.route('/api/detect/image', methods=['POST'])
 def api_detect_image():
     try:
         if 'image' not in request.files:
             return jsonify({'success': False, 'error': 'No image provided'}), 400
-        f     = request.files['image']
-        img   = cv2.imdecode(np.frombuffer(f.read(), np.uint8), cv2.IMREAD_COLOR)
+        f   = request.files['image']
+        img = cv2.imdecode(np.frombuffer(f.read(), np.uint8), cv2.IMREAD_COLOR)
         if img is None:
             return jsonify({'success': False, 'error': 'Invalid image'}), 400
 
         t0      = time.time()
         results = vehicle_detector.detect_vehicles(img)
         proc_t  = time.time() - t0
-
         analysis = TrafficIntelligence.analyse(results['lane_counts'])
         summary  = analysis['summary']
 
@@ -936,7 +893,6 @@ def api_detect_image():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-# ── Video Detection ─────────────────────────
 @app.route('/api/detect/video', methods=['POST'])
 def api_detect_video():
     filepath = None
@@ -1019,164 +975,20 @@ def api_detect_video():
 
 
 # ══════════════════════════════════════════════
-# LIVE CAMERA  (FIX: rewritten for stability)
+# LIVE CAMERA  (disabled on Render – no webcam)
 # ══════════════════════════════════════════════
-def _camera_worker():
-    """
-    Worker that runs in a daemon thread.
-    Reads frames, runs detection, emits via SocketIO.
-    Exits cleanly when camera_state['active'] == False.
-    """
-    logger.info("Camera worker started")
-    fc = 0; last_emit = 0; last_reroute = 0
-
-    while camera_state['active']:
-        try:
-            with camera_state['lock']:
-                cap = camera_state['cap']
-                if cap is None or not cap.isOpened():
-                    logger.error("Camera cap lost in worker")
-                    break
-
-            ret, frame = cap.read()
-            if not ret:
-                logger.warning("Camera read failed – retrying")
-                time.sleep(0.1)
-                continue
-
-            now = time.time()
-
-            # process every 3rd frame
-            if fc % 3 == 0:
-                results  = vehicle_detector.detect_vehicles(frame)
-                analysis = TrafficIntelligence.analyse(results['lane_counts'])
-                summary  = analysis['summary']
-
-                rec = summary['priority_lane']
-                if rec in signal_controller.lanes:
-                    signal_controller.current_green  = rec
-                    signal_controller.time_remaining = summary['green_duration']
-
-                annotated = vehicle_detector.draw_detections(
-                    frame.copy(), results['bounding_boxes'], analysis
-                )
-
-                for lane, counts in results['lane_counts'].items():
-                    signal_controller.update_lane_density(lane, counts)
-
-                # congestion feedback
-                total_v = results['total']
-                if total_v > 20:
-                    cong = min(0.9, 0.3 + total_v / 100)
-                    for road in list(road_network.congestion.keys())[:5]:
-                        road_network.update_congestion(road, cong)
-
-                    if now - last_reroute > 30:
-                        try:
-                            socketio.emit('auto_reroute', {'congestion_level': cong,
-                                                           'total_vehicles': total_v, 'timestamp': now})
-                        except Exception: pass
-                        last_reroute = now
-
-                # emit at most 10 fps
-                if now - last_emit >= 0.1:
-                    _, buf = cv2.imencode('.jpg', annotated, [cv2.IMWRITE_JPEG_QUALITY, 70])
-                    frame_b64 = base64.b64encode(buf).decode()
-                    try:
-                        socketio.emit('camera_frame', {
-                            'image':            frame_b64,
-                            'detections':       results,
-                            'traffic_analysis': summary,
-                            'timestamp':        now,
-                        })
-                        socketio.emit('traffic_intelligence', summary)
-                    except Exception as e:
-                        logger.debug(f"SocketIO emit error: {e}")
-                    last_emit = now
-
-            fc += 1
-            time.sleep(0.03)   # ~30 fps cap
-
-        except Exception as e:
-            logger.error(f"Camera worker exception: {e}")
-            time.sleep(0.2)
-
-    # cleanup
-    with camera_state['lock']:
-        if camera_state['cap'] is not None:
-            camera_state['cap'].release()
-            camera_state['cap'] = None
-        camera_state['active'] = False
-    logger.info("Camera worker stopped")
-
-
 @app.route('/api/camera/start', methods=['POST', 'GET'])
 def api_camera_start():
-    with camera_state['lock']:
-        if camera_state['active']:
-            return jsonify({'success': False, 'error': 'Camera already active'}), 400
-
-        cam_idx = 0
-        if request.method == 'POST':
-            try:
-                body = request.get_json(silent=True) or {}
-                cam_idx = int(body.get('camera_index', 0))
-            except Exception:
-                cam_idx = 0
-
-        cap = cv2.VideoCapture(cam_idx)
-        # give OpenCV a moment to initialise
-        time.sleep(0.3)
-
-        if not cap.isOpened():
-            # try index 0 as fallback
-            cap.release()
-            if cam_idx != 0:
-                cap = cv2.VideoCapture(0)
-                time.sleep(0.3)
-
-        if not cap.isOpened():
-            return jsonify({'success': False,
-                            'error': 'Could not open camera. Check that it is connected and not in use.'}), 500
-
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        cap.set(cv2.CAP_PROP_FPS,           30)
-        # lower internal buffer to reduce latency
-        cap.set(cv2.CAP_PROP_BUFFERSIZE,     1)
-
-        camera_state['cap']    = cap
-        camera_state['active'] = True
-
-    t = threading.Thread(target=_camera_worker, daemon=True, name="CameraWorker")
-    camera_state['thread'] = t
-    t.start()
-
-    logger.info("Camera started")
-    return jsonify({'success': True, 'message': 'Camera started successfully'})
-
+    # Render servers have no physical camera; return graceful message
+    return jsonify({
+        'success': False,
+        'error': 'Live camera is not available on cloud deployments. '
+                 'Please use image or video upload instead.'
+    }), 400
 
 @app.route('/api/camera/stop', methods=['POST', 'GET'])
 def api_camera_stop():
-    with camera_state['lock']:
-        if not camera_state['active']:
-            return jsonify({'success': False, 'error': 'Camera not active'}), 400
-        camera_state['active'] = False   # signal worker to exit
-
-    # wait briefly for worker to finish
-    t = camera_state.get('thread')
-    if t and t.is_alive():
-        t.join(timeout=3.0)
-
-    # force release if still open
-    with camera_state['lock']:
-        if camera_state['cap'] is not None:
-            try: camera_state['cap'].release()
-            except Exception: pass
-            camera_state['cap'] = None
-
-    logger.info("Camera stopped")
-    return jsonify({'success': True, 'message': 'Camera stopped'})
+    return jsonify({'success': True, 'message': 'Camera not active'})
 
 
 # ══════════════════════════════════════════════
@@ -1233,40 +1045,30 @@ def stats_update_thread():
 # ERROR HANDLERS
 # ══════════════════════════════════════════════
 @app.errorhandler(404)
-def not_found(e):      return jsonify({'success': False, 'error': 'Not found'}), 404
+def not_found(e):    return jsonify({'success': False, 'error': 'Not found'}), 404
 @app.errorhandler(500)
-def server_error(e):   return jsonify({'success': False, 'error': 'Internal error'}), 500
+def server_error(e): return jsonify({'success': False, 'error': 'Internal error'}), 500
 @app.errorhandler(413)
-def too_large(e):      return jsonify({'success': False, 'error': 'File too large (max 100 MB)'}), 413
+def too_large(e):    return jsonify({'success': False, 'error': 'File too large (max 100 MB)'}), 413
 
 
 # ══════════════════════════════════════════════
-# MAIN
+# MAIN  –  start background threads then serve
 # ══════════════════════════════════════════════
+init_database()
+
+threading.Thread(target=signal_update_thread, daemon=True, name="SignalThread").start()
+threading.Thread(target=stats_update_thread,  daemon=True, name="StatsThread").start()
+
 if __name__ == "__main__":
-    db_ok = init_database()
     print("=" * 70)
     print("🚦  AI-Enabled Smart Traffic Management System — Coimbatore")
     print("=" * 70)
-    print(f"   Database   : {'OK' if db_ok else 'DISABLED'}")
     print(f"   YOLO       : {'Loaded' if vehicle_detector.available else 'Simulated'}")
     print(f"   Road graph : {'OSM' if OSMNX_AVAILABLE else 'Fallback'}")
-    print(f"   Routing    : OSRM (real roads) → OSM graph → straight-line")
+    print(f"   Routing    : OSRM → OSM graph → straight-line")
     print(f"   Geocoding  : {'Nominatim+Fallback' if geocoding_service.available else 'Fallback dict'}")
-    print("   Intelligence: Steps 1-4 active")
-    print()
-    print("   http://127.0.0.1:5000/")
     print("=" * 70)
 
-    threading.Thread(target=signal_update_thread, daemon=True, name="SignalThread").start()
-    threading.Thread(target=stats_update_thread,  daemon=True, name="StatsThread").start()
-
     port = int(os.getenv("PORT", 5000))
-    try:
-        socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
-    except KeyboardInterrupt:
-        logger.info("Shutting down …")
-        with camera_state['lock']:
-            camera_state['active'] = False
-            if camera_state['cap']:
-                camera_state['cap'].release()
+    socketio.run(app, host='0.0.0.0', port=port, debug=False)
